@@ -75,7 +75,9 @@ def print_safe_encoding(str):
 
 
 class colors(object):
+    red = '\033[31m'
     yellow = '\033[33m'
+    blue = '\033[34m'
     green = '\033[92m'
     reset = '\033[0m'
 
@@ -553,7 +555,7 @@ def parse_gerrit_ssh_params_from_git_url(git_url):
     return (hostname, username, port, project_name)
 
 
-def query_reviews(remote_url, change=None, current_patch_set=True,
+def query_reviews(remote_url, change=None, current_patch_set=True, all_approvals=False,
                   exception=CommandFailed, parse_exc=Exception):
     if remote_url.startswith('http://') or remote_url.startswith('https://'):
         query = query_reviews_over_http
@@ -562,13 +564,19 @@ def query_reviews(remote_url, change=None, current_patch_set=True,
     return query(remote_url,
                  change=change,
                  current_patch_set=current_patch_set,
+                 all_approvals=all_approvals,
                  exception=exception,
                  parse_exc=parse_exc)
 
 
-def query_reviews_over_http(remote_url, change=None, current_patch_set=True,
+def query_reviews_over_http(remote_url, change=None, current_patch_set=True, all_approvals=False,
                             exception=CommandFailed, parse_exc=Exception):
     url = urljoin(remote_url, '/changes/')
+
+    if all_approvals:
+        'ERR not implemented over http yet'
+        raise
+
     if change:
         if current_patch_set:
             url += '?q=%s&o=CURRENT_REVISION' % change
@@ -606,16 +614,22 @@ def query_reviews_over_http(remote_url, change=None, current_patch_set=True,
     return reviews
 
 
-def query_reviews_over_ssh(remote_url, change=None, current_patch_set=True,
+def query_reviews_over_ssh(remote_url, change=None, current_patch_set=True, all_approvals=False,
                            exception=CommandFailed, parse_exc=Exception):
     (hostname, username, port, project_name) = \
         parse_gerrit_ssh_params_from_git_url(remote_url)
 
     if change:
         if current_patch_set:
-            query = "--current-patch-set change:%s" % change
+            query = "--current-patch-set "
         else:
-            query = "--patch-sets change:%s" % change
+            query = "--patch-sets "
+
+        if all_approvals:
+            query += "--all-approvals "
+
+        query += "change:%s" % change
+
     else:
         query = "project:%s status:open" % project_name
 
@@ -915,12 +929,93 @@ def assert_one_change(remote, branch, yes, have_hook):
                       "changes into one commit before submitting (for "
                       "indivisible changes) or submitting from separate "
                       "branches (for independent changes).")
-            print("\nThe outstanding commits are:\n\n%s\n\n"
-                  "Do you really want to submit the above commits?" % output)
-            yes_no = do_input("Type 'yes' to confirm, other to cancel: ")
-            if yes_no.lower().strip() != "yes":
-                print("Aborting.")
-                sys.exit(1)
+            print("\nThe outstanding commits are:\n\n%s\n\n" % output)
+
+    warn = "Obsoleting the Following patchset:\n\n"
+    for curr_change in output.split("\n"):
+        rm_color = re.compile(r'\x1b[^m]*m')
+        sha = rm_color.sub('', curr_change.split()[0])
+
+
+        cmd = ("git show %s --summary --pretty=%%ce%%n%%b" % sha)
+        (status, out) = run_command_status(cmd)
+        if status != 0:
+            print("Had trouble running %s" % cmd)
+            print_safe_encoding(out)
+            sys.exit(1)
+
+
+        curr_auth = out.split("\n")[0]
+        for l in out.split("\n"):
+            res = re.search('^\s*Change-Id:\s+(I[a-zA-Z0-9]+).*', l)
+            try:
+                curr_changeid = res.group(1)
+            except (IndexError, AttributeError) as e:
+                pass
+
+        if len(curr_changeid) != 41:
+            print('ERR changeid not found %s', curr_changeid)
+            sys.exit(1)
+
+        curr_rev = query_reviews(get_remote_url(remote),
+                                 change=curr_changeid,
+                                 current_patch_set=True,
+                                 all_approvals=True,
+                                 exception=CannotQueryPatchSet,
+                                 parse_exc=ReviewInformationNotFound)
+        if not len(curr_rev):
+            continue
+
+        if check_use_color_output():
+            cr=colors.red
+            rr=colors.reset
+            cy=colors.yellow
+            cb=colors.blue
+        else:
+            cr=''
+            rr=''
+            cy=''
+            cb=''
+
+        curr_subject = curr_rev[0]['subject']
+        curr_subj = (curr_subject[:30] + '..') if len (curr_subject) > 30 else curr_subject
+        curr_patchset = curr_rev[0]['currentPatchSet']['number']
+        curr_ps_creation = curr_rev[0]['currentPatchSet']['createdOn']
+        # Compare parent revision?
+        ps_email = curr_rev[0]['currentPatchSet']['uploader']['email']
+        # Check if last commiter has changed
+        if ps_email == curr_auth:
+            curr_ps_email = cb + ps_email + rr
+        else:
+            curr_ps_email = cr + ps_email + rr
+
+        try:
+            vote = curr_rev[0]['patchSets'][int(curr_patchset) - 1]['approvals'][0]['value']
+        except KeyError:
+            vote = '0'
+        ivote = int(vote)
+        if ivote < 0:
+            ps_vote = ("%s%s%s" % (cr,vote,rr))
+        elif ivote > 0:
+            ps_vote = ("%s%s%s" % (cb,vote,rr))
+        else:
+            ps_vote = " %s" % (vote)
+
+        warn += ("%s [%s] %s %s %s\n" % (
+              curr_change.split()[0] + rr,
+              ps_vote,
+              datetime.datetime.fromtimestamp(int(curr_ps_creation)).strftime('%d-%m-%Y %H:%M:%S'),
+              '{:<32}'.format(curr_subj),
+              curr_ps_email))
+
+    if len(warn.split("\n")) > 4:
+        print(warn)
+        yes_no = do_input("Type 'yes' to confirm, other to cancel: ")
+        if yes_no.lower().strip() != "yes":
+            print("Aborting.")
+            sys.exit(1)
+
+
 
 
 def use_topic(why, topic):
