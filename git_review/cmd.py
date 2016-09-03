@@ -911,6 +911,7 @@ def assert_one_change(remote, branch, yes, have_hook):
         sys.exit(1)
     filtered = filter(None, output.split("\n"))
     output_lines = sum(1 for s in filtered)
+    warn_msg = ''
     if output_lines == 1 and not have_hook:
         printwrap("Your change was committed before the commit hook was "
                   "installed. Amending the commit to add a gerrit change id.")
@@ -929,9 +930,9 @@ def assert_one_change(remote, branch, yes, have_hook):
                       "changes into one commit before submitting (for "
                       "indivisible changes) or submitting from separate "
                       "branches (for independent changes).")
-            print("\nThe outstanding commits are:\n\n%s\n\n" % output)
+            warn_msg = ("\nThe outstanding commits are:\n\n%s\n\n" % output)
 
-    warn = "Obsoleting the Following patchset:\n\n"
+    warn_msg += "Obsoleting the Following patchset:\n\n"
     for curr_change in output.split("\n"):
         rm_color = re.compile(r'\x1b[^m]*m')
         sha = rm_color.sub('', curr_change.split()[0])
@@ -1001,15 +1002,15 @@ def assert_one_change(remote, branch, yes, have_hook):
         else:
             ps_vote = " %s" % (vote)
 
-        warn += ("%s [%s] %s %s %s\n" % (
+        warn_msg += ("%s [%s] %s %s %s\n" % (
               curr_change.split()[0] + rr,
               ps_vote,
               datetime.datetime.fromtimestamp(int(curr_ps_creation)).strftime('%d-%m-%Y %H:%M:%S'),
               '{:<32}'.format(curr_subj),
               curr_ps_email))
 
-    if len(warn.split("\n")) > 4:
-        print(warn)
+    if len(warn_msg.split("\n")) > 6:
+        print(warn_msg)
         yes_no = do_input("Type 'yes' to confirm, other to cancel: ")
         if yes_no.lower().strip() != "yes":
             print("Aborting.")
