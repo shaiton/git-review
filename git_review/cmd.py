@@ -912,6 +912,7 @@ def assert_one_change(remote, branch, yes, have_hook):
     filtered = filter(None, output.split("\n"))
     output_lines = sum(1 for s in filtered)
     user_warned = False
+    warn_msg = ''
     if output_lines == 1 and not have_hook:
         printwrap("Your change was committed before the commit hook was "
                   "installed. Amending the commit to add a gerrit change id.")
@@ -930,12 +931,11 @@ def assert_one_change(remote, branch, yes, have_hook):
                       "changes into one commit before submitting (for "
                       "indivisible changes) or submitting from separate "
                       "branches (for independent changes).")
-            warn_msg = ("\nThe outstanding commits are:\n\n%s" % output)
-            print(warn_msg)
             user_warned = True
 
     obsoleting_msg = "\n\nObsoleting the Following patchset:\n\n"
     nochid_msg = '\n\nNo Change-Id defined for commit:\n\n'
+    noch = ''
     for curr_change in output.split("\n"):
         rm_color = re.compile(r'\x1b[^m]*m')
         sha = rm_color.sub('', curr_change.split()[0])
@@ -959,7 +959,8 @@ def assert_one_change(remote, branch, yes, have_hook):
                 pass
 
         if len(curr_changeid) != 41:
-             nochid_msg += curr_change
+            noch += curr_change.split()[0]
+
         else:
             curr_rev = query_reviews(get_remote_url(remote),
                                      change=curr_changeid,
@@ -1005,19 +1006,30 @@ def assert_one_change(remote, branch, yes, have_hook):
             else:
                 ps_vote = " %s" % (vote)
 
-            obsoleting_msg += ("%s [%s] %s %s %s\n" % (
+            obsoleting_msg += ("  %s [%s] %s %s %s\n" % (
                   curr_change.split()[0] + rr,
                   ps_vote,
                   datetime.datetime.fromtimestamp(int(curr_ps_creation)).strftime('%d-%m-%Y %H:%M:%S'),
                   '{:<32}'.format(curr_subj),
                   curr_ps_email))
 
-    if len(nochid_msg.split("\n")) > 2:
-        print(nochid_msg)
-        user_warned = True
+    if output_lines > 1:
+        output_fil = ''
+        for m in output.split('\n'):
+            if m.split()[0] in noch:
+                output_fil += ('! %s \n' % m )
+            else:
+                output_fil += ('  %s \n' % m )
+        warn_msg = ("\nThe outstanding commits are:\n"
+                    "'!' indicates a missing Change-Id\n\n%s" % output_fil)
+        print(warn_msg)
+    else:
+        if len(nochid_msg.split("\n")) > 4:
+            print(nochid_msg)
+            user_warned = True
 
 
-    if len(obsoleting_msg.split("\n")) > 2:
+    if len(obsoleting_msg.split("\n")) > 4:
         print(obsoleting_msg)
         user_warned = True
 
