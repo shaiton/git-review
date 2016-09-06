@@ -825,6 +825,7 @@ def check_remote(branch, remote, scheme, hostname, port, project,
 def rebase_changes(branch, remote, interactive=True):
 
     global _orig_head
+    global _orig_path
 
     remote_branch = "remotes/%s/%s" % (remote, branch)
 
@@ -833,14 +834,15 @@ def rebase_changes(branch, remote, interactive=True):
 
     # since the value of ORIG_HEAD may not be set by rebase as expected
     # for use in undo_rebase, make sure to save it explicitly
-    cmd = "git rev-parse HEAD"
+    cmd = "git rev-parse --show-toplevel HEAD"
     (status, output) = run_command_status(cmd)
     if status != 0:
         print("Errors running %s" % cmd)
         if interactive:
             print_safe_encoding(output)
         return False
-    _orig_head = output
+    _orig_path = output.split('\n')[0]
+    _orig_head = output.split('\n')[1]
 
     cmd = "git show-ref --quiet --verify refs/%s" % remote_branch
     (status, output) = run_command_status(cmd)
@@ -873,8 +875,18 @@ def rebase_changes(branch, remote, interactive=True):
 
 def undo_rebase():
     global _orig_head
+    global _orig_path
     if not _orig_head:
         return True
+
+    cmd = "git rev-parse"
+    (status, output) = run_command_status(cmd)
+    if status != 0:
+        print_safe_encoding(output)
+        print("Non existant path on the remote. Consider moving back to\n"
+              "`%s' before starting again.\n"
+              "Current repository should be successfully rebased." %  _orig_path)
+        return False
 
     cmd = "git reset --hard %s" % _orig_head
     (status, output) = run_command_status(cmd)
