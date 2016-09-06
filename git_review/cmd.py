@@ -1465,6 +1465,9 @@ def _main():
     parser.add_argument("-i", "--new-changeid", dest="regenerate",
                         action="store_true",
                         help="Regenerate Change-id before submitting")
+    parser.add_argument("--no-thin", dest="nothin",
+                             action="store_true",
+                             help="Pass the --no-thin option to git-send-pack.")
     parser.add_argument("-r", "--remote", dest="remote",
                         help="git remote to use for gerrit")
     parser.add_argument("--use-pushurl", dest="usepushurl",
@@ -1565,6 +1568,7 @@ def _main():
                         draft=False,
                         verbose=False,
                         update=False,
+                        nothin=False,
                         setup=False,
                         list=False,
                         yes=False)
@@ -1669,7 +1673,12 @@ def _main():
     elif options.compatible:
         ref = "for"
 
-    cmd = "git push %s HEAD:refs/%s/%s" % (remote, ref, branch)
+    if options.nothin:
+        thin = '--thin'
+    else:
+        thin = '--no-thin'
+
+    cmd = "git push %s %s HEAD:refs/%s/%s" % (thin, remote, ref, branch)
     if options.topic is not None:
         topic = options.topic
     else:
