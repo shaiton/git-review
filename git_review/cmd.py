@@ -1024,12 +1024,12 @@ def assert_one_change(remote, branch, yes, have_hook):
                     "'!' indicates a missing Change-Id\n\n%s" % output_fil)
         print(warn_msg)
     else:
-        if len(nochid_msg.split("\n")) > 4:
+        if len(nochid_msg.split("\n")) > 5:
             print(nochid_msg)
             user_warned = True
 
 
-    if len(obsoleting_msg.split("\n")) > 4:
+    if len(obsoleting_msg.split("\n")) > 5:
         print(obsoleting_msg)
         user_warned = True
 
