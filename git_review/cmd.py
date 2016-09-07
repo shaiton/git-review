@@ -1002,9 +1002,10 @@ def assert_one_change(remote, branch, yes, have_hook):
             ps_email = curr_rev[0]['currentPatchSet']['uploader']['email']
             # Check if last commiter has changed
             if ps_email == curr_auth:
-                curr_ps_email = cb + ps_email + rr
+                curr_ps_email = cb
             else:
-                curr_ps_email = cr + ps_email + rr
+                curr_ps_email = cr
+            curr_ps_email += ps_email.split('@')[0] + rr
 
             try:
                 vote = curr_rev[0]['patchSets'][int(curr_patchset) - 1]['approvals'][0]['value']
