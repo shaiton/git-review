@@ -985,7 +985,6 @@ def assert_one_change(remote, branch, yes, have_hook):
 
             if curr_rev[0]['branch'] != branch:
                 continue
-            else:
 
             if check_use_color_output():
                 cr=colors.red
